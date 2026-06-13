@@ -1,5 +1,7 @@
 from asyncio import run
 from dataclasses import dataclass
+from dotenv import load_dotenv
+from os import getenv
 
 from ipv8.community import Community, CommunitySettings
 from ipv8.configuration import ConfigBuilder, WalkerDefinition, Strategy, default_bootstrap_defs
@@ -11,41 +13,31 @@ from ipv8.lazy_community import lazy_wrapper
 from ipv8_service import IPv8
 
 
+# Load environment variables
+GROUP_ID = getenv("GROUP_ID")
+MY_ORDER = int(getenv("MY_ORDER"))
+KEYS_FILE = getenv("KEYS_FILE")
+assert GROUP_ID and MY_ORDER and KEYS_FILE
+
 COMMUNITY_ID = bytes.fromhex("4c61623247726f75705369676e696e6732303236")
 
-SERVER_PUBLIC_KEY = bytes.fromhex(
-    "4c69624e61434c504b3a82e33614a342774e084af80835838d6dbdb64a537d3ddb6c1d82011a7f101553cda40cf5fa0e0fc23abd0a9c4f81322282c5b34566f6b8401f5f683031e60c96"
-)
+SERVER_PUBLIC_KEY = bytes.fromhex("4c69624e61434c504b3a82e33614a342774e084af80835838d6dbdb64a537d3ddb6c1d82011a7f101553cda40cf5fa0e0fc23abd0a9c4f81322282c5b34566f6b8401f5f683031e60c96")
 
-PUBLIC_KEY_1 = bytes.fromhex(
-    "4c69624e61434c504b3a6ddc887fd7a98d41126d24eb4d3349f27683c555698c94b80b0a11bb43c2f6765645e827f4c331c3eb653f1f52d38683423e6b013c25f3157ed8adbf86aa997a"
-)
-PUBLIC_KEY_2 = bytes.fromhex(
-    "4c69624e61434c504b3ae9a6f3ee192bcb9833fe647728a19e74d6b7fe2e42efe96f4de40d4922aa7a3dcb7c47a5f1776db9902548aab9fb4ef06dd1dc39b12f99f5e8326334ebe7fcd3"
-)
-PUBLIC_KEY_3 = bytes.fromhex(
-    "4c69624e61434c504b3a87ca1dee80e128d6ad389fb7b2fd1f99bfa86377fdf3815e97b734d767c48840dc818b5467b27b8fad1e434e07005e05eac40a726334a5b3a83b289a51ca097c"
-)
+PUBLIC_KEY_1 = bytes.fromhex("4c69624e61434c504b3a6ddc887fd7a98d41126d24eb4d3349f27683c555698c94b80b0a11bb43c2f6765645e827f4c331c3eb653f1f52d38683423e6b013c25f3157ed8adbf86aa997a")
+PUBLIC_KEY_2 = bytes.fromhex("4c69624e61434c504b3aea247287365cefd9dfb2bc0916f6b48cc92fb538ba6de6d4e48bc963e53ec457f55086c09ef0141d8b82305528915235be3166e967dc50e0d6c13d8a91108670")
+PUBLIC_KEY_3 = bytes.fromhex("4c69624e61434c504b3a87ca1dee80e128d6ad389fb7b2fd1f99bfa86377fdf3815e97b734d767c48840dc818b5467b27b8fad1e434e07005e05eac40a726334a5b3a83b289a51ca097c")
 
 PUBLIC_KEYS = [PUBLIC_KEY_1, PUBLIC_KEY_2, PUBLIC_KEY_3]
 
-# 1 = Antreas, 2 = Jacek, 3 = Victor
-MY_ORDER = 1
 
-GROUP_ID = "4bb7a5c4f6a550f3"
-
-# For the first run, only member 1 should set these True.
-# Other members should set both False and wait.
-REGISTER_GROUP = True
-START_PROTOCOL = True
-
+REGISTER_GROUP = False
+START_PROTOCOL = False
 
 @dataclass
 class RegisterMessage(DataClassPayload[1]):
     member1_key: bytes
     member2_key: bytes
     member3_key: bytes
-
 
 @dataclass
 class RegisterResponseMessage(DataClassPayload[2]):
@@ -83,7 +75,6 @@ class RoundResultMessage(DataClassPayload[6]):
     message: str
 
 
-# Internal group messages
 @dataclass
 class NonceMessage(DataClassPayload[7]):
     round_number: int
@@ -155,7 +146,6 @@ class BlockchainEngineeringCommunity(Community, PeerObserver):
 
         self.network.add_peer_observer(self)
 
-        # Store myself.
         self.peers[MY_ORDER - 1] = self.my_peer
 
     def on_peer_added(self, peer: Peer) -> None:
@@ -252,7 +242,6 @@ class BlockchainEngineeringCommunity(Community, PeerObserver):
         if self.round_number is None:
             return
 
-        # Round 1 submitter = member 1, round 2 = member 2, round 3 = member 3.
         if MY_ORDER != self.round_number:
             return
 
@@ -307,7 +296,7 @@ class BlockchainEngineeringCommunity(Community, PeerObserver):
 
         print("Got GroupID:", GROUP_ID)
 
-        # Do not start here unless you are member 1 and explicitly configured to start.
+        # Do NOT start here unless you are member 1 and explicitly configured to start.
         if MY_ORDER == 1 and START_PROTOCOL and not self.initial_action_done:
             self.initial_action_done = True
             self.ez_send(self.server, ChallengeRequestMessage(GROUP_ID))
@@ -413,12 +402,12 @@ class BlockchainEngineeringCommunity(Community, PeerObserver):
 
 async def start_client() -> None:
     builder = ConfigBuilder().clear_keys().clear_overlays()
-    builder.add_key("me", "curve25519", "mykey.pem")
+    builder.add_key("me", "curve25519", KEYS_FILE)
 
     builder.add_overlay(
         "BlockchainEngineeringCommunity",
         "me",
-        [WalkerDefinition(Strategy.RandomWalk, 50, {"timeout": 3.0})],
+        [WalkerDefinition(Strategy.RandomWalk, -1, {"timeout": 3.0})],
         default_bootstrap_defs,
         {},
         [("started",)],
