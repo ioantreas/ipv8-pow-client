@@ -5,6 +5,7 @@ from hashlib import sha256
 from ipv8.keyvault.crypto import default_eccrypto
 import os
 
+
 @dataclass
 class Block:
     height: int
@@ -15,6 +16,18 @@ class Block:
     nonce: int
     block_hash: bytes
     tx_hashes: list[bytes]
+
+    def to_json(self) -> dict[str, object]:
+        return {
+            "height": self.height,
+            "prev_hash": self.prev_hash.hex(),
+            "txs_hash": self.txs_hash.hex(),
+            "timestamp": self.timestamp,
+            "difficulty": self.difficulty,
+            "nonce": self.nonce,
+            "block_hash": self.block_hash.hex(),
+            "tx_hashes": [tx_hash.hex() for tx_hash in self.tx_hashes],
+        }
 
 @dataclass
 class Transaction:
@@ -86,7 +99,7 @@ def mine_block_with_stop(
     print("Mining summ stopping blocks")
     num_tries = 0
 
-    while num_tries < 10_000_000_000:
+    while num_tries < 10_100_000_000:
         if should_stop():
             return None
         if num_tries % 10_000_000 == 0:
@@ -97,12 +110,14 @@ def mine_block_with_stop(
         block_hash = compute_block_hash(header)
 
         if check_pow(block_hash, possible.difficulty):
-            print(f"Found sblock!: {possible}")
             possible.block_hash = block_hash
+            print(f"Found sblock!: {possible}")
             return possible
         num_tries += 1
 
-def verify_block(block: Block) -> bool:
+def verify_block(block: Block | None) -> bool:
+    if block is None:
+        return False
     header = block_to_header(block)
     hash = compute_block_hash(header)
     if hash != block.block_hash:
@@ -123,3 +138,6 @@ def verify_prev_links_cleanly(block: Block, tipHash: bytes) -> bool:
         return False
 
     return True
+
+genesis_block.block_hash = compute_block_hash(block_to_header(genesis_block))
+print(genesis_block.block_hash)
