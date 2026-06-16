@@ -19,6 +19,9 @@ import threading
 
 load_dotenv()
 
+PARTITION=False
+LOAD_FROM_FILE=True
+
 # Load environment variables
 community_3_id = getenv("CLIENT_3_COMMUNITY_ID", "")
 GROUP_ID = getenv("GROUP_ID", "")
@@ -187,6 +190,9 @@ class BlockchainEngineeringCommunity(Community, PeerObserver):
         print("Started peer")
         print("I am public key:", self.my_peer.public_key.key_to_bin().hex())
 
+        if LOAD_FROM_FILE:
+            self.load_chain_from_file()
+
         self.network.add_peer_observer(self)
         self.start_pow_search_task()
         # Store myself.
@@ -223,6 +229,18 @@ class BlockchainEngineeringCommunity(Community, PeerObserver):
             if peer is None:
                 continue
             self.ez_send(peer, payload)
+
+    def load_chain_from_file(self) -> None:
+        "Loads the blockchain from the chain.json file"
+        print("Loading the blockchain...")
+
+        with open("chain.json", "r") as file:
+            content = file.read()
+            chain = json.loads(content)
+            chain_converted = [Block.from_json(block) for block in chain]
+            self.chain = chain_converted
+
+        print(f"Successfully loaded chain of height: {len(self.chain)-1}")
 
     def start_pow_search_task(self)  -> None:
         """
@@ -296,16 +314,20 @@ class BlockchainEngineeringCommunity(Community, PeerObserver):
             block.block_hash,
             b"".join(block.tx_hashes),
         )
-        if message.height <= 60 and MY_ORDER != 1:
-            self.peers[PUBLIC_KEY_1] = None
-            self.send_to_others(message)
-        if message.height <= 60 and MY_ORDER == 1:
-            pass
-        if message.height > 60 and MY_ORDER != 1:
-            assert self.peer0 is not None
-            self.peers[PUBLIC_KEY_1] = self.peer0
-            self.send_to_others(message)
-        if message.height > 60 and MY_ORDER == 1:
+
+        if PARTITION:
+            if message.height <= 60 and MY_ORDER != 1:
+                self.peers[PUBLIC_KEY_1] = None
+                self.send_to_others(message)
+            if message.height <= 60 and MY_ORDER == 1:
+                pass
+            if message.height > 60 and MY_ORDER != 1:
+                assert self.peer0 is not None
+                self.peers[PUBLIC_KEY_1] = self.peer0
+                self.send_to_others(message)
+            if message.height > 60 and MY_ORDER == 1:
+                self.send_to_others(message)
+        else:
             self.send_to_others(message)
 
         print("finished mining")
